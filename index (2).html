@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Blueprint Logger</title>
+<style>
+  :root{
+    --ink:#15171a; --muted:#717784; --line:#e7e9ee; --card:#fff; --bg:#f4f5f7;
+    --legs:#16a34a; --chest:#ea580c; --back:#2563eb; --delts:#ca8a04;
+    --accent:#2563eb; --accent-soft:#eff6ff;
+    --good:#16a34a; --over:#2563eb; --under:#dc2626;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.4;
+    padding:0 0 110px;-webkit-text-size-adjust:100%;font-variant-numeric:tabular-nums;}
+  .wrap{max-width:560px;margin:0 auto;padding:0 12px;}
+
+  header{position:sticky;top:0;z-index:20;background:var(--bg);
+    padding:14px 12px 10px;border-bottom:1px solid var(--line);}
+  .htitle{font-size:17px;font-weight:800;letter-spacing:-.02em;}
+  .hsub{font-size:12px;color:var(--muted);margin-top:1px;}
+  .storewarn{display:none;margin-top:8px;font-size:11.5px;background:#fef3c7;color:#92400e;
+    border:1px solid #fde68a;border-radius:7px;padding:7px 9px;}
+
+  /* Day picker */
+  .days{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin:16px 0;}
+  .daybtn{border:1px solid var(--line);background:var(--card);border-radius:12px;
+    padding:16px 12px;text-align:left;cursor:pointer;font:inherit;
+    border-left-width:5px;transition:transform .08s;}
+  .daybtn:active{transform:scale(.98);}
+  .daybtn.legs{border-left-color:var(--legs);} .daybtn.chest{border-left-color:var(--chest);}
+  .daybtn.back{border-left-color:var(--back);} .daybtn.delts{border-left-color:var(--delts);}
+  .daybtn .nm{font-size:15px;font-weight:800;}
+  .daybtn.legs .nm{color:var(--legs);} .daybtn.chest .nm{color:var(--chest);}
+  .daybtn.back .nm{color:var(--back);} .daybtn.delts .nm{color:var(--delts);}
+  .daybtn .tg{font-size:11.5px;color:var(--muted);margin-top:2px;}
+
+  .resume{margin:0 0 14px;background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:12px;
+    padding:13px 14px;display:none;}
+  .resume b{color:var(--accent);}
+  .resume .row{display:flex;gap:8px;margin-top:10px;}
+  .resume button{flex:1;}
+
+  /* Group + exercise */
+  .grp-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);margin:18px 0 9px;}
+  .ex{background:var(--card);border:1px solid var(--line);border-radius:13px;
+    margin-bottom:11px;overflow:hidden;}
+  .ex-top{padding:12px 13px 10px;}
+  .ex-name{font-size:15px;font-weight:700;}
+  .ex-target{font-size:12px;color:var(--muted);margin-top:1px;}
+  .ex-last{font-size:12.5px;color:#dc2626;font-weight:700;margin-top:3px;}
+  .ex-last span{font-weight:600;}
+
+  /* logged set chips */
+  .logged{display:flex;flex-wrap:wrap;gap:6px;padding:0 13px;margin-bottom:2px;}
+  .chip{font-size:12.5px;font-weight:600;background:#f1f3f6;border:1px solid var(--line);
+    border-radius:8px;padding:5px 9px;display:flex;align-items:center;gap:7px;}
+  .chip .x{color:var(--muted);font-weight:800;font-size:14px;line-height:1;cursor:pointer;padding:0 2px;}
+  .chip .rpe{font-size:10.5px;color:#fff;background:var(--muted);border-radius:5px;padding:1px 5px;}
+
+  /* quick input */
+  .input{display:flex;align-items:flex-end;gap:8px;padding:11px 13px 13px;
+    border-top:1px solid var(--line);background:#fafbfc;}
+  .field{flex:1;}
+  .field label{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--muted);margin-bottom:4px;text-align:center;}
+  .stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;
+    background:#fff;overflow:hidden;}
+  .stepper button{width:34px;height:42px;border:none;background:#fff;font-size:20px;
+    font-weight:600;color:var(--muted);cursor:pointer;flex:none;}
+  .stepper button:active{background:#eef0f3;}
+  .stepper input{width:100%;min-width:0;border:none;text-align:center;font:inherit;
+    font-size:16px;font-weight:700;height:42px;background:#fff;}
+  .stepper input:focus{outline:none;}
+  .rpe-sel{height:42px;border:1px solid var(--line);border-radius:10px;background:#fff;
+    font:inherit;font-size:14px;font-weight:600;padding:0 6px;color:var(--ink);width:100%;}
+  .logbtn{height:42px;padding:0 16px;border:none;border-radius:10px;background:var(--accent);
+    color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer;flex:none;}
+  .logbtn:active{filter:brightness(.92);}
+
+  /* footer bar */
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;
+    border-top:1px solid var(--line);padding:10px 12px calc(10px + env(safe-area-inset-bottom));}
+  .bar-inner{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:10px;}
+  .stat{flex:1;}
+  .stat .n{font-size:17px;font-weight:800;}
+  .stat .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  .bar button{height:42px;padding:0 14px;border:none;border-radius:10px;font:inherit;
+    font-size:13.5px;font-weight:700;cursor:pointer;}
+  .btn-ghost{background:#f1f3f6;color:var(--ink);}
+  .btn-done{background:var(--ink);color:#fff;}
+
+  .toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;font-size:13px;font-weight:600;padding:10px 16px;
+    border-radius:10px;opacity:0;transition:.25s;z-index:50;pointer-events:none;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  .hidden{display:none!important;}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap" style="padding:0;">
+    <div class="htitle">Blueprint Logger</div>
+    <div class="hsub" id="hsub">Pick today's day to start</div>
+    <div class="storewarn" id="storewarn">Saving to this device is unavailable here — your data stays safe during the session, and you can tap <b>Copy</b> anytime to save it out. (Storage works once deployed to your phone.)</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- Resume banner -->
+  <div class="resume" id="resume">
+    <div>Session in progress — <b id="resume-day"></b>, <span id="resume-count"></span> sets logged.</div>
+    <div class="row">
+      <button class="logbtn" id="resume-btn" style="background:var(--accent)">Resume</button>
+      <button class="logbtn" id="discard-btn" style="background:#f1f3f6;color:var(--ink)">Discard</button>
+    </div>
+  </div>
+
+  <!-- Day picker -->
+  <div id="picker"></div>
+
+  <!-- Session view -->
+  <div id="session" class="hidden"></div>
+</div>
+
+<!-- Footer bar (session only) -->
+<div class="bar hidden" id="bar">
+  <div class="bar-inner">
+    <div class="stat"><div class="n" id="stat-sets">0</div><div class="l">Sets</div></div>
+    <div class="stat"><div class="n" id="stat-vol">0</div><div class="l">Volume (lb)</div></div>
+    <button class="btn-ghost" id="copy-btn">Copy</button>
+    <button class="btn-done" id="finish-btn">Finish</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- v1 PROGRAM DATA ---------- */
+const PROGRAM = {
+  legs: { name:"Legs", cls:"legs", tag:"Friday night", groups:[
+    { label:"Foundation — choose 1", ex:[
+      {n:"Back Squat", t:"5×5 @ 225 (top)", w:225, r:5},
+      {n:"Deadlift", t:"4×4 @ 315 (top)", w:315, r:4},
+    ]},
+    { label:"Auxiliary — choose 2–3", ex:[
+      {n:"Bulgarian Split Squat", t:"4×12 @ 50 / leg", w:50, r:12},
+      {n:"Smith Machine Lunge", t:"4×12 @ 90 / leg", w:90, r:12},
+      {n:"Glute Drive Machine", t:"4×8 @ 180", w:180, r:8},
+      {n:"Romanian Deadlift", t:"4×10 @ 135", w:135, r:10},
+    ]},
+    { label:"Alternates — choose 2–4", ex:[
+      {n:"Standing Calf Raise", t:"4×15", w:90, r:15},
+      {n:"Leg Extension", t:"3×12–15", w:100, r:12},
+      {n:"Hamstring Curl", t:"3×12–15", w:80, r:12},
+      {n:"Leg Press", t:"3×12", w:270, r:12},
+    ]},
+  ]},
+  chest: { name:"Chest + Triceps", cls:"chest", tag:"Flat BB+Inc DB · or Inc BB+Flat DB", groups:[
+    { label:"Foundation", ex:[
+      {n:"Flat Barbell Bench", t:"2×5 @ 225, then singles → 185", w:225, r:5},
+      {n:"Incline Dumbbell Bench", t:"5×8 @ 80 / hand", w:80, r:8},
+      {n:"Incline Barbell Press", t:"4×5 @ 185", w:185, r:5},
+      {n:"Flat Dumbbell Press", t:"5×5 @ 100 / hand (top)", w:100, r:5},
+    ]},
+    { label:"Auxiliary — choose 4", ex:[
+      {n:"Cable Flies", t:"3×15", w:25, r:15},
+      {n:"Weighted Dips", t:"4×8", w:25, r:8},
+      {n:"Hex Press", t:"4×10", w:70, r:10},
+      {n:"Skullcrushers", t:"4×8 @ 100", w:100, r:8},
+      {n:"Rope Pulldown", t:"3×12–15", w:50, r:12},
+      {n:"V-Bar Pulldown", t:"3×12", w:60, r:12},
+      {n:"Overhead Rope Extension", t:"3×12", w:45, r:12},
+    ]},
+  ]},
+  back: { name:"Back + Biceps", cls:"back", tag:"Choose 2 — always pull-ups", groups:[
+    { label:"Foundation — choose 2", ex:[
+      {n:"Weighted Pull-Ups", t:"8×5 (+45)", w:45, r:5},
+      {n:"Barbell Row", t:"4×6 @ 185", w:185, r:6},
+      {n:"One-Arm Dumbbell Row", t:"4×10 / side", w:90, r:10},
+      {n:"T-Bar Row", t:"4×8", w:90, r:8},
+    ]},
+    { label:"Auxiliary — choose 2–4", ex:[
+      {n:"Cable Pullover", t:"3×15", w:50, r:15},
+      {n:"Lat Pulldown", t:"3×12", w:130, r:12},
+      {n:"Cable Row", t:"3×12", w:130, r:12},
+      {n:"Smith Machine Shrug", t:"3×15", w:185, r:15},
+      {n:"Back Extension", t:"3×15", w:25, r:15},
+    ]},
+    { label:"Biceps — choose 3", ex:[
+      {n:"EZ-Bar Curl", t:"4×6 @ 100", w:100, r:6},
+      {n:"Alternating Dumbbell Curls", t:"3×10 / arm", w:35, r:10},
+      {n:"Alternating Hammer Curls", t:"3×10 / arm", w:35, r:10},
+      {n:"Spider Curls", t:"3×12", w:25, r:12},
+      {n:"Cable Curls", t:"3×15", w:50, r:15},
+    ]},
+  ]},
+  delts: { name:"Shoulders", cls:"delts", tag:"Front / Side / Rear ×2 each", groups:[
+    { label:"Front ×2", ex:[
+      {n:"Dumbbell Military Press", t:"4×8 (→ 70×5)", w:60, r:8},
+      {n:"Standing Barbell Shoulder Press", t:"4×6", w:95, r:6},
+      {n:"Dumbbell Front Raise (swap)", t:"3×12", w:20, r:12},
+    ]},
+    { label:"Side ×2", ex:[
+      {n:"Lateral Dumbbell Raise", t:"4×15 (max 40)", w:25, r:15},
+      {n:"Lateral Cable Raise", t:"3×15 / side", w:15, r:15},
+      {n:"EZ-Bar Upright Row (swap)", t:"3×12", w:60, r:12},
+    ]},
+    { label:"Rear ×2", ex:[
+      {n:"Bent-Over Fly", t:"4×15", w:20, r:15},
+      {n:"Rear Cable Fly", t:"3×15 / side", w:15, r:15},
+      {n:"High Cable Row (swap)", t:"3×12", w:90, r:12},
+    ]},
+  ]},
+};
+
+/* ---------- ROBUST STORAGE (in-memory truth + best-effort persist) ---------- */
+const KEY = "blueprint_logger_v1";
+const store = {
+  mem: { current:null, history:[] },
+  persistOK: true,
+  load(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      if(raw) this.mem = JSON.parse(raw);
+      // probe write
+      localStorage.setItem(KEY+"_probe","1"); localStorage.removeItem(KEY+"_probe");
+    }catch(e){ this.persistOK = false; }
+  },
+  save(){
+    try{ localStorage.setItem(KEY, JSON.stringify(this.mem)); }
+    catch(e){ this.persistOK = false; } // never throws into the workout
+  }
+};
+store.load();
+
+/* ---------- STATE ---------- */
+let dayKey = null; // active session day
+
+/* ---------- HELPERS ---------- */
+const $ = id => document.getElementById(id);
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),1400); }
+function exKey(gi,ei){ return gi+"_"+ei; }
+function lastSessionStr(exName){
+  for(let i=store.mem.history.length-1;i>=0;i--){
+    const sets = store.mem.history[i].sets.filter(s=>s.ex===exName);
+    if(sets.length) return sets.map(s=>`${s.w?s.w+"×":""}${s.r}${s.rpe?" @"+s.rpe:""}`).join(", ");
+  }
+  return null;
+}
+
+/* ---------- RENDER: PICKER ---------- */
+function renderPicker(){
+  const p = $("picker"); p.innerHTML = "";
+  const grid = document.createElement("div"); grid.className="days";
+  Object.keys(PROGRAM).forEach(k=>{
+    const d = PROGRAM[k];
+    const b = document.createElement("button");
+    b.className = "daybtn "+d.cls;
+    b.innerHTML = `<div class="nm">${d.name}</div><div class="tg">${d.tag}</div>`;
+    b.onclick = ()=>startSession(k);
+    grid.appendChild(b);
+  });
+  p.appendChild(grid);
+}
+
+/* ---------- RESUME ---------- */
+function renderResume(){
+  const c = store.mem.current;
+  const r = $("resume");
+  if(c){
+    $("resume-day").textContent = PROGRAM[c.day].name;
+    $("resume-count").textContent = c.sets.length;
+    r.style.display = "block";
+  } else { r.style.display = "none"; }
+}
+
+/* ---------- SESSION ---------- */
+function startSession(k){
+  if(!store.mem.current){
+    store.mem.current = { day:k, started:Date.now(), sets:[] };
+    store.save();
+  } else if(store.mem.current.day !== k){
+    // switching day with an open session: keep it simple, confirm
+    if(!confirm("A "+PROGRAM[store.mem.current.day].name+" session is in progress. Start "+PROGRAM[k].name+" instead? (current session is saved to history)")) return;
+    store.mem.history.push(store.mem.current);
+    store.mem.current = { day:k, started:Date.now(), sets:[] };
+    store.save();
+  }
+  dayKey = k;
+  renderSession();
+}
+
+function logSet(gi, ei, exName){
+  const wEl = $("w_"+exKey(gi,ei)), rEl = $("r_"+exKey(gi,ei)), rpeEl = $("rpe_"+exKey(gi,ei));
+  const w = parseFloat(wEl.value)||0;
+  const r = parseInt(rEl.value)||0;
+  const rpe = rpeEl.value ? parseFloat(rpeEl.value) : null;
+  if(r<=0){ toast("Enter reps"); return; }
+  store.mem.current.sets.push({ ex:exName, gi, ei, w, r, rpe, ts:Date.now() });
+  store.save();
+  renderLogged(gi, ei, exName);
+  updateBar();
+  toast("Logged ✓");
+}
+
+function deleteSet(idx){
+  store.mem.current.sets.splice(idx,1);
+  store.save();
+  renderSession(); // simplest: re-render
+}
+
+function renderLogged(gi, ei, exName){
+  const box = $("logged_"+exKey(gi,ei));
+  if(!box) return;
+  const sets = store.mem.current.sets;
+  box.innerHTML = "";
+  sets.forEach((s,idx)=>{
+    if(s.gi!==gi || s.ei!==ei) return;
+    const chip = document.createElement("div"); chip.className="chip";
+    chip.innerHTML = `<span>${s.w?s.w+"×":""}${s.r}</span>` +
+      (s.rpe?`<span class="rpe">@${s.rpe}</span>`:"") +
+      `<span class="x" data-i="${idx}">×</span>`;
+    chip.querySelector(".x").onclick = ()=>deleteSet(idx);
+    box.appendChild(chip);
+  });
+}
+
+function renderSession(){
+  const d = PROGRAM[dayKey];
+  $("hsub").textContent = d.name + " · logging live";
+  $("picker").classList.add("hidden");
+  $("resume").style.display = "none";
+  $("bar").classList.remove("hidden");
+  const s = $("session"); s.classList.remove("hidden"); s.innerHTML = "";
+
+  d.groups.forEach((g,gi)=>{
+    const gl = document.createElement("div"); gl.className="grp-label"; gl.textContent=g.label;
+    s.appendChild(gl);
+    g.ex.forEach((ex,ei)=>{
+      const card = document.createElement("div"); card.className="ex";
+      const id = exKey(gi,ei);
+      const lastStr = lastSessionStr(ex.n);
+      card.innerHTML = `
+        <div class="ex-top">
+          <div class="ex-name">${ex.n}</div>
+          <div class="ex-target">target: ${ex.t}</div>
+          <div class="ex-last">last session: <span>${lastStr || "—"}</span></div>
+        </div>
+        <div class="logged" id="logged_${id}"></div>
+        <div class="input">
+          <div class="field">
+            <label>Weight</label>
+            <div class="stepper">
+              <button data-act="wminus">−</button>
+              <input id="w_${id}" inputmode="decimal" value="${ex.w}">
+              <button data-act="wplus">+</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Reps</label>
+            <div class="stepper">
+              <button data-act="rminus">−</button>
+              <input id="r_${id}" inputmode="numeric" value="${ex.r}">
+              <button data-act="rplus">+</button>
+            </div>
+          </div>
+          <div class="field" style="flex:.7;">
+            <label>RPE</label>
+            <select class="rpe-sel" id="rpe_${id}">
+              <option value="">–</option>
+              <option>6</option><option>6.5</option><option>7</option><option>7.5</option>
+              <option>8</option><option>8.5</option><option>9</option><option>9.5</option><option>10</option>
+            </select>
+          </div>
+          <button class="logbtn" data-act="log">Log</button>
+        </div>`;
+      s.appendChild(card);
+
+      // wire steppers + log
+      const wIn = card.querySelector("#w_"+id), rIn = card.querySelector("#r_"+id);
+      card.querySelectorAll("[data-act]").forEach(btn=>{
+        const act = btn.dataset.act;
+        btn.onclick = ()=>{
+          if(act==="wplus")  wIn.value = (parseFloat(wIn.value)||0)+5;
+          if(act==="wminus") wIn.value = Math.max(0,(parseFloat(wIn.value)||0)-5);
+          if(act==="rplus")  rIn.value = (parseInt(rIn.value)||0)+1;
+          if(act==="rminus") rIn.value = Math.max(0,(parseInt(rIn.value)||0)-1);
+          if(act==="log")    logSet(gi, ei, ex.n);
+        };
+      });
+      renderLogged(gi, ei, ex.n);
+    });
+  });
+  updateBar();
+}
+
+function updateBar(){
+  const sets = store.mem.current ? store.mem.current.sets : [];
+  $("stat-sets").textContent = sets.length;
+  const vol = sets.reduce((a,s)=>a + (s.w||0)*(s.r||0), 0);
+  $("stat-vol").textContent = vol.toLocaleString();
+}
+
+/* ---------- COPY / FINISH ---------- */
+function sessionText(sess){
+  const d = PROGRAM[sess.day];
+  const date = new Date(sess.started).toLocaleString();
+  let out = `WORKOUT BLUEPRINT — ${d.name}\n${date}\n\n`;
+  // group sets by exercise in order logged
+  const byEx = {};
+  sess.sets.forEach(s=>{ (byEx[s.ex]=byEx[s.ex]||[]).push(s); });
+  Object.keys(byEx).forEach(ex=>{
+    out += ex + "\n";
+    byEx[ex].forEach(s=>{
+      out += `  ${s.w?s.w+" × ":""}${s.r}${s.rpe?"  @"+s.rpe:""}\n`;
+    });
+    out += "\n";
+  });
+  const vol = sess.sets.reduce((a,s)=>a+(s.w||0)*(s.r||0),0);
+  out += `Total: ${sess.sets.length} sets · ${vol.toLocaleString()} lb volume`;
+  return out;
+}
+
+function copySession(){
+  if(!store.mem.current || !store.mem.current.sets.length){ toast("Nothing logged yet"); return; }
+  const txt = sessionText(store.mem.current);
+  navigator.clipboard?.writeText(txt).then(
+    ()=>toast("Session copied"),
+    ()=>{ window.prompt("Copy your session:", txt); }
+  );
+}
+
+function finishSession(){
+  if(!store.mem.current){ return; }
+  if(!store.mem.current.sets.length){
+    if(confirm("No sets logged. Discard this session?")){ store.mem.current=null; store.save(); resetToPicker(); }
+    return;
+  }
+  copySession();
+  store.mem.current.ended = Date.now();
+  store.mem.history.push(store.mem.current);
+  store.mem.current = null;
+  store.save();
+  toast("Session saved");
+  setTimeout(resetToPicker, 600);
+}
+
+function resetToPicker(){
+  dayKey = null;
+  $("session").classList.add("hidden");
+  $("bar").classList.add("hidden");
+  $("picker").classList.remove("hidden");
+  $("hsub").textContent = "Pick today's day to start";
+  renderResume();
+}
+
+/* ---------- INIT ---------- */
+if(!store.persistOK){ $("storewarn").style.display="block"; }
+renderPicker();
+renderResume();
+$("resume-btn").onclick = ()=>{ dayKey = store.mem.current.day; renderSession(); };
+$("discard-btn").onclick = ()=>{ if(confirm("Discard the in-progress session?")){ store.mem.current=null; store.save(); renderResume(); } };
+$("copy-btn").onclick = copySession;
+$("finish-btn").onclick = finishSession;
+</script>
+</body>
+</html>
