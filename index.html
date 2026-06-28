@@ -98,7 +98,64 @@
     border-radius:10px;opacity:0;transition:.25s;z-index:50;pointer-events:none;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
+  /* weekly tracker */
+  .week{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:16px 0 14px;}
+  .week-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px;}
+  .week-top .lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+  .week-top .cnt{font-size:14px;font-weight:700;color:var(--muted);}
+  .week-top .cnt b{font-size:24px;color:var(--ink);}
+  .week-top .cnt.done b{color:var(--good);}
+  .week-bar{display:flex;gap:5px;}
+  .week-bar .seg{flex:1;height:10px;border-radius:5px;background:#e9ebef;}
+  .week-bar .seg.on{background:var(--accent);}
+  .week-bar .seg.over{background:var(--good);}
+
+  /* run logger */
+  .runcard{background:var(--card);border:1px solid var(--line);border-left:5px solid #7c3aed;
+    border-radius:14px;padding:14px 15px;margin-bottom:16px;}
+  .runcard .rt{font-size:15px;font-weight:800;color:#7c3aed;}
+  .runcard .rs{font-size:11.5px;color:var(--muted);margin:1px 0 12px;}
+  .run-row{display:flex;gap:9px;align-items:flex-end;}
+  .field input.plain{width:100%;border:1px solid var(--line);border-radius:10px;height:44px;
+    font:inherit;font-size:16px;font-weight:700;text-align:center;background:#fff;padding:0 6px;}
+  .field input.plain:focus{outline:none;border-color:var(--accent);}
+
+  .home-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);margin:4px 0 9px;}
+
+  /* session header */
+  .sess-head{display:flex;justify-content:space-between;align-items:center;margin:14px 0 2px;}
+  .backbtn{background:none;border:none;font:inherit;font-size:15px;font-weight:700;
+    color:var(--accent);cursor:pointer;padding:6px 2px;}
+  .discardbtn{background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font:inherit;
+    font-size:13px;font-weight:700;border-radius:9px;padding:8px 14px;cursor:pointer;}
+
+  /* two-row input */
+  .input2{padding:11px 13px 14px;border-top:1px solid var(--line);background:#fafbfc;}
+  .input2 .irow{display:flex;gap:10px;align-items:flex-end;}
+  .input2 .irow + .irow{margin-top:10px;}
+  .namefield{margin-bottom:10px;}
+  .namefield input{width:100%;border:1px solid var(--line);border-radius:10px;height:44px;
+    font:inherit;font-size:15px;font-weight:600;padding:0 13px;background:#fff;}
+  .namefield input:focus{outline:none;border-color:var(--accent);}
+  .input2 .stepper input{font-size:18px;}
+  .input2 .stepper button{width:38px;}
+  .logbtn.wide{flex:1;height:44px;}
+
   .hidden{display:none!important;}
+
+  /* custom confirm modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;
+    display:none;align-items:center;justify-content:center;padding:24px;}
+  .modal-overlay.show{display:flex;}
+  .modal-box{background:#fff;border-radius:16px;padding:20px;max-width:340px;width:100%;
+    box-shadow:0 24px 60px rgba(0,0,0,.28);}
+  .modal-msg{font-size:15px;font-weight:600;line-height:1.45;margin-bottom:18px;}
+  .modal-actions{display:flex;gap:10px;}
+  .modal-actions button{flex:1;height:46px;border:none;border-radius:11px;font:inherit;
+    font-size:14.5px;font-weight:700;cursor:pointer;}
+  .modal-cancel{background:#f1f3f6;color:var(--ink);}
+  .modal-ok{background:#dc2626;color:#fff;}
 </style>
 </head>
 <body>
@@ -138,6 +195,17 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Custom confirm modal (native confirm() fails in iOS standalone PWAs) -->
+<div class="modal-overlay" id="modal">
+  <div class="modal-box">
+    <div class="modal-msg" id="modal-msg"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="modal-cancel">Cancel</button>
+      <button class="modal-ok" id="modal-ok">Discard</button>
+    </div>
+  </div>
+</div>
 
 <script>
 /* ---------- v1 PROGRAM DATA ---------- */
@@ -221,7 +289,7 @@ const PROGRAM = {
 /* ---------- ROBUST STORAGE (in-memory truth + best-effort persist) ---------- */
 const KEY = "blueprint_logger_v1";
 const store = {
-  mem: { current:null, history:[] },
+  mem: { current:null, history:[], runs:[] },
   persistOK: true,
   load(){
     try{
@@ -230,6 +298,8 @@ const store = {
       // probe write
       localStorage.setItem(KEY+"_probe","1"); localStorage.removeItem(KEY+"_probe");
     }catch(e){ this.persistOK = false; }
+    if(!this.mem.history) this.mem.history = [];
+    if(!this.mem.runs) this.mem.runs = [];
   },
   save(){
     try{ localStorage.setItem(KEY, JSON.stringify(this.mem)); }
@@ -245,6 +315,21 @@ let dayKey = null; // active session day
 const $ = id => document.getElementById(id);
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show");
   clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),1400); }
+function confirmModal(msg, okLabel){
+  return new Promise(resolve=>{
+    $("modal-msg").textContent = msg;
+    $("modal-ok").textContent = okLabel || "Discard";
+    $("modal").classList.add("show");
+    const done = (val)=>{
+      $("modal").classList.remove("show");
+      $("modal-ok").onclick = null; $("modal-cancel").onclick = null; $("modal").onclick = null;
+      resolve(val);
+    };
+    $("modal-ok").onclick = ()=>done(true);
+    $("modal-cancel").onclick = ()=>done(false);
+    $("modal").onclick = (e)=>{ if(e.target === $("modal")) done(false); };
+  });
+}
 function exKey(gi,ei){ return gi+"_"+ei; }
 function lastSessionStr(exName){
   for(let i=store.mem.history.length-1;i>=0;i--){
@@ -253,11 +338,66 @@ function lastSessionStr(exName){
   }
   return null;
 }
+const RPE_OPTS = `<option value="">–</option><option>6</option><option>6.5</option><option>7</option><option>7.5</option><option>8</option><option>8.5</option><option>9</option><option>9.5</option><option>10</option>`;
+const WEEK_TARGET = 6;
+function weeklyCount(){
+  const since = Date.now() - 7*24*60*60*1000;
+  let n = 0;
+  store.mem.history.forEach(s=>{ if((s.ended||s.started||0) >= since) n++; });
+  store.mem.runs.forEach(r=>{ if((r.ts||0) >= since) n++; });
+  return n;
+}
+function logRun(){
+  const dist = parseFloat($("run-dist").value)||0;
+  const pace = ($("run-pace").value||"").trim();
+  if(dist<=0){ toast("Enter a distance"); return; }
+  store.mem.runs.push({ distance:dist, pace, ts:Date.now() });
+  store.save();
+  renderPicker();
+  toast("Run logged ✓");
+}
 
-/* ---------- RENDER: PICKER ---------- */
+/* ---------- RENDER: PICKER (home) ---------- */
 function renderPicker(){
   const p = $("picker"); p.innerHTML = "";
-  const grid = document.createElement("div"); grid.className="days";
+
+  // weekly tracker
+  const count = weeklyCount();
+  const done = count >= WEEK_TARGET;
+  const segN = Math.max(WEEK_TARGET, count);
+  let segs = "";
+  for(let i=0;i<segN;i++){
+    let cls = "seg";
+    if(i < count) cls += done ? " over" : " on";
+    segs += `<div class="${cls}"></div>`;
+  }
+  const week = document.createElement("div"); week.className = "week";
+  week.innerHTML = `
+    <div class="week-top">
+      <span class="lbl">This week</span>
+      <span class="cnt ${done?'done':''}"><b>${count}</b> / ${WEEK_TARGET}</span>
+    </div>
+    <div class="week-bar">${segs}</div>`;
+  p.appendChild(week);
+
+  // run logger
+  const run = document.createElement("div"); run.className = "runcard";
+  run.innerHTML = `
+    <div class="rt">Log a Run</div>
+    <div class="rs">Counts toward your weekly total</div>
+    <div class="run-row">
+      <div class="field" style="flex:1;"><label>Distance (mi)</label>
+        <input id="run-dist" class="plain" inputmode="decimal" placeholder="3.1"></div>
+      <div class="field" style="flex:1;"><label>Avg pace</label>
+        <input id="run-pace" class="plain" inputmode="text" placeholder="8:30"></div>
+      <button class="logbtn" id="run-btn">Log</button>
+    </div>`;
+  p.appendChild(run);
+
+  // lift day grid
+  const h = document.createElement("div"); h.className = "home-h"; h.textContent = "Lift — pick today's day";
+  p.appendChild(h);
+  const grid = document.createElement("div"); grid.className = "days";
   Object.keys(PROGRAM).forEach(k=>{
     const d = PROGRAM[k];
     const b = document.createElement("button");
@@ -267,6 +407,8 @@ function renderPicker(){
     grid.appendChild(b);
   });
   p.appendChild(grid);
+
+  $("run-btn").onclick = logRun;
 }
 
 /* ---------- RESUME ---------- */
@@ -281,13 +423,13 @@ function renderResume(){
 }
 
 /* ---------- SESSION ---------- */
-function startSession(k){
+async function startSession(k){
   if(!store.mem.current){
     store.mem.current = { day:k, started:Date.now(), sets:[] };
     store.save();
   } else if(store.mem.current.day !== k){
-    // switching day with an open session: keep it simple, confirm
-    if(!confirm("A "+PROGRAM[store.mem.current.day].name+" session is in progress. Start "+PROGRAM[k].name+" instead? (current session is saved to history)")) return;
+    const ok = await confirmModal("A "+PROGRAM[store.mem.current.day].name+" session is already in progress. Start "+PROGRAM[k].name+" instead? Your current one will be saved first.", "Switch");
+    if(!ok) return;
     store.mem.history.push(store.mem.current);
     store.mem.current = { day:k, started:Date.now(), sets:[] };
     store.save();
@@ -339,6 +481,13 @@ function renderSession(){
   $("bar").classList.remove("hidden");
   const s = $("session"); s.classList.remove("hidden"); s.innerHTML = "";
 
+  // header: back + discard
+  const head = document.createElement("div"); head.className = "sess-head";
+  head.innerHTML = `<button class="backbtn" id="back-btn">← Back</button>
+    <button class="discardbtn" id="discard-sess-btn">Discard session</button>`;
+  s.appendChild(head);
+
+  // program groups
   d.groups.forEach((g,gi)=>{
     const gl = document.createElement("div"); gl.className="grp-label"; gl.textContent=g.label;
     s.appendChild(gl);
@@ -353,36 +502,35 @@ function renderSession(){
           <div class="ex-last">last session: <span>${lastStr || "—"}</span></div>
         </div>
         <div class="logged" id="logged_${id}"></div>
-        <div class="input">
-          <div class="field">
-            <label>Weight</label>
-            <div class="stepper">
-              <button data-act="wminus">−</button>
-              <input id="w_${id}" inputmode="decimal" value="${ex.w}">
-              <button data-act="wplus">+</button>
+        <div class="input2">
+          <div class="irow">
+            <div class="field">
+              <label>Weight</label>
+              <div class="stepper">
+                <button data-act="wminus">−</button>
+                <input id="w_${id}" inputmode="decimal" value="${ex.w}">
+                <button data-act="wplus">+</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Reps</label>
+              <div class="stepper">
+                <button data-act="rminus">−</button>
+                <input id="r_${id}" inputmode="numeric" value="${ex.r}">
+                <button data-act="rplus">+</button>
+              </div>
             </div>
           </div>
-          <div class="field">
-            <label>Reps</label>
-            <div class="stepper">
-              <button data-act="rminus">−</button>
-              <input id="r_${id}" inputmode="numeric" value="${ex.r}">
-              <button data-act="rplus">+</button>
+          <div class="irow">
+            <div class="field" style="flex:1;">
+              <label>RPE (optional)</label>
+              <select class="rpe-sel" id="rpe_${id}">${RPE_OPTS}</select>
             </div>
+            <button class="logbtn wide" data-act="log">Log set</button>
           </div>
-          <div class="field" style="flex:.7;">
-            <label>RPE</label>
-            <select class="rpe-sel" id="rpe_${id}">
-              <option value="">–</option>
-              <option>6</option><option>6.5</option><option>7</option><option>7.5</option>
-              <option>8</option><option>8.5</option><option>9</option><option>9.5</option><option>10</option>
-            </select>
-          </div>
-          <button class="logbtn" data-act="log">Log</button>
         </div>`;
       s.appendChild(card);
 
-      // wire steppers + log
       const wIn = card.querySelector("#w_"+id), rIn = card.querySelector("#r_"+id);
       card.querySelectorAll("[data-act]").forEach(btn=>{
         const act = btn.dataset.act;
@@ -397,7 +545,94 @@ function renderSession(){
       renderLogged(gi, ei, ex.n);
     });
   });
+
+  // freestyle card
+  const fl = document.createElement("div"); fl.className="grp-label"; fl.textContent="Freestyle — add any exercise";
+  s.appendChild(fl);
+  const fcard = document.createElement("div"); fcard.className="ex";
+  fcard.innerHTML = `
+    <div class="logged" id="logged_free" style="padding-top:11px;"></div>
+    <div class="input2" style="border-top:none;">
+      <div class="namefield">
+        <input id="fname" placeholder="Exercise name (e.g. Face Pull)">
+      </div>
+      <div class="irow">
+        <div class="field">
+          <label>Weight</label>
+          <div class="stepper">
+            <button data-fact="wminus">−</button>
+            <input id="w_free" inputmode="decimal" value="0">
+            <button data-fact="wplus">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Reps</label>
+          <div class="stepper">
+            <button data-fact="rminus">−</button>
+            <input id="r_free" inputmode="numeric" value="10">
+            <button data-fact="rplus">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="irow">
+        <div class="field" style="flex:1;">
+          <label>RPE (optional)</label>
+          <select class="rpe-sel" id="rpe_free">${RPE_OPTS}</select>
+        </div>
+        <button class="logbtn wide" data-fact="log">Log set</button>
+      </div>
+    </div>`;
+  s.appendChild(fcard);
+  const fw = $("w_free"), fr = $("r_free");
+  fcard.querySelectorAll("[data-fact]").forEach(btn=>{
+    const act = btn.dataset.fact;
+    btn.onclick = ()=>{
+      if(act==="wplus")  fw.value = (parseFloat(fw.value)||0)+5;
+      if(act==="wminus") fw.value = Math.max(0,(parseFloat(fw.value)||0)-5);
+      if(act==="rplus")  fr.value = (parseInt(fr.value)||0)+1;
+      if(act==="rminus") fr.value = Math.max(0,(parseInt(fr.value)||0)-1);
+      if(act==="log")    logFreestyle();
+    };
+  });
+  renderFreestyleLogged();
+
+  $("back-btn").onclick = resetToPicker;
+  $("discard-sess-btn").onclick = discardSession;
   updateBar();
+}
+
+function logFreestyle(){
+  const name = ($("fname").value||"").trim();
+  const w = parseFloat($("w_free").value)||0;
+  const r = parseInt($("r_free").value)||0;
+  const rpe = $("rpe_free").value ? parseFloat($("rpe_free").value) : null;
+  if(!name){ toast("Name the exercise"); return; }
+  if(r<=0){ toast("Enter reps"); return; }
+  store.mem.current.sets.push({ ex:name, gi:"free", ei:0, free:true, w, r, rpe, ts:Date.now() });
+  store.save();
+  renderFreestyleLogged();
+  updateBar();
+  toast("Logged ✓");
+}
+
+function renderFreestyleLogged(){
+  const box = $("logged_free"); if(!box) return;
+  box.innerHTML = "";
+  store.mem.current.sets.forEach((s,idx)=>{
+    if(!s.free) return;
+    const chip = document.createElement("div"); chip.className="chip";
+    chip.innerHTML = `<span><b>${s.ex}</b> · ${s.w?s.w+"×":""}${s.r}</span>` +
+      (s.rpe?`<span class="rpe">@${s.rpe}</span>`:"") +
+      `<span class="x">×</span>`;
+    chip.querySelector(".x").onclick = ()=>deleteSet(idx);
+    box.appendChild(chip);
+  });
+}
+
+async function discardSession(){
+  if(await confirmModal("Discard this session? Any logged sets will be lost.")){
+    store.mem.current = null; store.save(); resetToPicker();
+  }
 }
 
 function updateBar(){
@@ -436,10 +671,10 @@ function copySession(){
   );
 }
 
-function finishSession(){
+async function finishSession(){
   if(!store.mem.current){ return; }
   if(!store.mem.current.sets.length){
-    if(confirm("No sets logged. Discard this session?")){ store.mem.current=null; store.save(); resetToPicker(); }
+    if(await confirmModal("No sets logged yet. Discard this session?")){ store.mem.current=null; store.save(); resetToPicker(); }
     return;
   }
   copySession();
@@ -457,6 +692,7 @@ function resetToPicker(){
   $("bar").classList.add("hidden");
   $("picker").classList.remove("hidden");
   $("hsub").textContent = "Pick today's day to start";
+  renderPicker();
   renderResume();
 }
 
@@ -465,7 +701,7 @@ if(!store.persistOK){ $("storewarn").style.display="block"; }
 renderPicker();
 renderResume();
 $("resume-btn").onclick = ()=>{ dayKey = store.mem.current.day; renderSession(); };
-$("discard-btn").onclick = ()=>{ if(confirm("Discard the in-progress session?")){ store.mem.current=null; store.save(); renderResume(); } };
+$("discard-btn").onclick = async ()=>{ if(await confirmModal("Discard the in-progress session? Any logged sets will be lost.")){ store.mem.current=null; store.save(); renderResume(); renderPicker(); } };
 $("copy-btn").onclick = copySession;
 $("finish-btn").onclick = finishSession;
 </script>
